@@ -126,3 +126,64 @@ output "alb_sg_id" {
 output "task_sg_id" {
   value = aws_security_group.task.id
 }
+
+
+# -------------------------------------------------------- Logging / IAM
+resource "aws_cloudwatch_log_group" "app" {
+  name              = "/ecs/${var.name}"
+  retention_in_days = 7
+}
+
+data "aws_iam_policy_document" "ecs_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["ecs-tasks.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "execution" {
+  name               = "${var.name}-task-exec-role"
+  assume_role_policy = data.aws_iam_policy_document.ecs_assume.json
+}
+
+# Allows the task to write logs (logs:CreateLogStream, logs:PutLogEvents)
+resource "aws_iam_role_policy_attachment" "execution" {
+  role       = aws_iam_role.execution.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+# ---------------------------------------------------------------- ECS
+resource "aws_ecs_cluster" "main" {
+  name = "${var.name}-cluster"
+}
+
+resource "aws_ecs_task_definition" "app" {
+  family                   = "${var.name}-task"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = "256"
+  memory                   = "512"
+  execution_role_arn       = aws_iam_role.execution.arn
+
+  container_definitions = jsonencode([{
+    name         = "nginx"
+    image        = local.image
+    essential    = true
+    portMappings = [{ containerPort = 80, protocol = "tcp" }]
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.app.name
+        awslogs-region        = var.region
+        awslogs-stream-prefix = "nginx"
+      }
+    }
+  }])
+}
+
+output "cluster_name" {
+  value = aws_ecs_cluster.main.name
+}
