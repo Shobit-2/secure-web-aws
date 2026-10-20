@@ -1,11 +1,15 @@
-DevOps Practical Assessment: Secure a Web Service on AWS
-One small nginx website on Amazon ECS (Fargate), reached through an internet-facing Application Load Balancer. A direct call to a container fails. Everything is described in Terraform (`main.tf`).
+Secure a Web Service on AWS
+
+One small nginx website on Amazon ECS (Fargate), reached through an internet-facing Application Load Balancer. A direct call to a container fails. 
+
+Everything is described in Terraform (`main.tf`).
+
 Region: `ap-south-1` (Mumbai)
 Tooling: Terraform >= 1.5, AWS provider ~> 5.0, AWS CLI v2
 Site URL while deployed: `http://secure-web-alb-1492229862.ap-south-1.elb.amazonaws.com/` (the stack has been destroyed, see Teardown result)
----
+
 1. Architecture
-```
+
                          Internet
                             |  TCP 80
                             v
@@ -29,7 +33,7 @@ Site URL while deployed: `http://secure-web-alb-1492229862.ap-south-1.elb.amazon
               |  outbound via Internet Gateway (image pull)
               v
    public.ecr.aws/docker/library/nginx:stable-alpine
-```
+
 Component	Detail
 VPC	`10.20.0.0/16`
 Public subnets	`10.20.1.0/24` (ap-south-1a) and `10.20.2.0/24` (ap-south-1b)
@@ -43,8 +47,9 @@ ECS service	Desired count 2, Fargate, task security group, public IPv4 on each t
 Load balancer	Internet-facing ALB in both public subnets
 Target group	Target type `ip`, health check on `/`
 Listener	Port 80, forwards to the target group
+
 2. Deploy commands
-```bash
+
 aws configure                  # region ap-south-1
 terraform init
 terraform fmt
@@ -52,41 +57,39 @@ terraform validate
 terraform plan -out tfplan
 terraform apply tfplan         # waits until both targets are healthy
 terraform output
-```
+
 The service sets `wait_for_steady_state = true`, so `apply` returns only after both tasks are running and healthy in the target group. A USD 5 budget alert was created before applying.
+
 3. Test evidence
-Raw output files are in `proofs/`. Commands are the PowerShell versions that were run.
+
 Evidence 1: `curl -sS -D - -o /dev/null http://<alb-dns>/` returns 200
-```powershell
+
 $ALB = terraform output -raw alb_dns_name
 curl.exe -sS -D - -o NUL "http://$ALB/"
-```
-```text
+
 PASTE proofs/proof1-alb-200.txt here (should start with HTTP/1.1 200 OK)
-```
+
 Evidence 2: Task security group rule, inbound TCP 80 allowed from the ALB security group
-```powershell
+
 aws ec2 describe-security-groups --region ap-south-1 --group-ids (terraform output -raw task_sg_id) --query "SecurityGroups[0].IpPermissions"
-```
-```json
+
 PASTE proofs/proof2-task-sg.json here
-```
+
 The source is the ALB security group (`sg-03df34e33eb425bbd`) in `UserIdGroupPairs`, and `IpRanges` is empty. Task security group: `sg-0f7b0761d89e9010b`.
+
 Evidence 3: `curl http://<task-public-ip>/` fails with a timeout or connection refused
-```powershell
+
 curl.exe -sS -m 10 "http://<task-public-ip>/"
-```
-```text
+
 PASTE proofs/proof3-direct-task.txt here (should end with a timeout, for example: curl: (28) Connection timed out)
-```
+
 Extra evidence: two healthy targets, in two subnets
-```json
 PASTE proofs/proof4-targets-healthy.json here
-```
-```json
+
 PASTE proofs/proof5-tasks-az.json here
-```
+
 Evidence 4: Screenshots from the AWS console and browser
+
 What it shows	Screenshot
 VPC `10.20.0.0/16`	![VPC](screenshots/01-vpc.png)
 Two public subnets in two Availability Zones	![Subnets](screenshots/02-subnets.png)
