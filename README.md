@@ -33,20 +33,23 @@ Site URL while deployed: `http://secure-web-alb-1492229862.ap-south-1.elb.amazon
               |  outbound via Internet Gateway (image pull)
               v
    public.ecr.aws/docker/library/nginx:stable-alpine
+   
 
-Component	Detail
-VPC	`10.20.0.0/16`
-Public subnets	`10.20.1.0/24` (ap-south-1a) and `10.20.2.0/24` (ap-south-1b)
-Internet gateway	Attached to the VPC; route table sends `0.0.0.0/0` to it; associated with both subnets
-ALB security group	Inbound TCP 80 from `0.0.0.0/0`; attached to the load balancer
-Task security group	Inbound TCP 80 from the ALB security group only; attached to the tasks
-ECS cluster	`secure-web-cluster`
-Task definition	Fargate, 0.25 vCPU, 0.5 GB, `awslogs` driver to CloudWatch Logs `/ecs/secure-web`
-Execution role	`secure-web-task-exec-role` with `AmazonECSTaskExecutionRolePolicy` (log writes and image pull)
-ECS service	Desired count 2, Fargate, task security group, public IPv4 on each task, both public subnets
-Load balancer	Internet-facing ALB in both public subnets
-Target group	Target type `ip`, health check on `/`
-Listener	Port 80, forwards to the target group
+Component                     	Detail
+
+VPC	                           `10.20.0.0/16`
+Public subnets	               `10.20.1.0/24` (ap-south-1a) and `10.20.2.0/24` (ap-south-1b)
+Internet gateway	             Attached to the VPC; route table sends `0.0.0.0/0` to it; associated with both subnets
+ALB security group	           Inbound TCP 80 from `0.0.0.0/0`; attached to the load balancer
+Task security group	           Inbound TCP 80 from the ALB security group only; attached to the tasks
+ECS cluster	                   `secure-web-cluster`
+Task definition	               Fargate, 0.25 vCPU, 0.5 GB, `awslogs` driver to CloudWatch Logs `/ecs/secure-web`
+Execution role	              `secure-web-task-exec-role` with `AmazonECSTaskExecutionRolePolicy` (log writes and image pull)
+ECS service	                   Desired count 2, Fargate, task security group, public IPv4 on each task, both public subnets
+Load balancer	                 Internet-facing ALB in both public subnets
+Target group	                 Target type `ip`, health check on `/`
+Listener	                     Port 80, forwards to the target group
+
 
 2. Deploy commands
 
@@ -67,13 +70,13 @@ Evidence 1: `curl -sS -D - -o /dev/null http://<alb-dns>/` returns 200
 $ALB = terraform output -raw alb_dns_name
 curl.exe -sS -D - -o NUL "http://$ALB/"
 
-PASTE proofs/proof1-alb-200.txt here (should start with HTTP/1.1 200 OK)
+<img width="1150" height="361" alt="image" src="https://github.com/user-attachments/assets/a0a40409-479f-4ee3-8cb3-4e43d5ac21ea" />
 
 Evidence 2: Task security group rule, inbound TCP 80 allowed from the ALB security group
 
 aws ec2 describe-security-groups --region ap-south-1 --group-ids (terraform output -raw task_sg_id) --query "SecurityGroups[0].IpPermissions"
 
-PASTE proofs/proof2-task-sg.json here
+<img width="1234" height="511" alt="image" src="https://github.com/user-attachments/assets/dd4c06af-d78b-4510-87b2-ecb454266339" />
 
 The source is the ALB security group (`sg-03df34e33eb425bbd`) in `UserIdGroupPairs`, and `IpRanges` is empty. Task security group: `sg-0f7b0761d89e9010b`.
 
@@ -91,15 +94,17 @@ PASTE proofs/proof5-tasks-az.json here
 Evidence 4: Screenshots from the AWS console and browser
 
 What it shows	Screenshot
-VPC `10.20.0.0/16`	![VPC](screenshots/01-vpc.png)
-Two public subnets in two Availability Zones	![Subnets](screenshots/02-subnets.png)
-Route table: `0.0.0.0/0` to the internet gateway, both subnets associated	![Route table](screenshots/03-route-table.png)
-Task security group: TCP 80 from the ALB security group	![Task SG](screenshots/04-task-sg.png)
-Application Load Balancer, internet-facing, two AZs	![ALB](screenshots/05-alb.png)
-Target group: two healthy targets	![Targets](screenshots/06-targets-healthy.png)
-ECS service: desired 2, running 2	![ECS service](screenshots/07-ecs-service.png)
-nginx welcome page through the ALB DNS name	![Browser](screenshots/08-browser.png)
-CloudWatch log stream from the containers	![Logs](screenshots/09-logs.png)
+
+VPC `10.20.0.0/16`	
+Two public subnets in two Availability Zones	
+Route table: `0.0.0.0/0` to the internet gateway, both subnets associated	
+Task security group: TCP 80 from the ALB security group
+Application Load Balancer, internet-facing, two AZs	
+Target group: two healthy targets	
+ECS service: desired 2, running 2	
+nginx welcome page through the ALB DNS name	
+CloudWatch log stream from the containers	
+
 4. Design note
 1. One successful request, browser to nginx. The browser resolves the ALB DNS name and opens TCP 80 to an ALB node in a public subnet. The ALB security group (`secure-web-alb-sg`) allows inbound 80 from anywhere. The listener on port 80 forwards the request to the target group (`secure-web-tg`), which picks a healthy task IP. The ALB connects to that Fargate task on port 80, and the task security group (`secure-web-task-sg`) accepts it because the source is the ALB security group. The nginx container in the task answers, and the response returns through the ALB.
 2. Why the task's public IP does not open the site. The public IP gives the task a route out, but inbound traffic is still filtered by the task security group. Its only inbound rule is TCP 80 from the ALB security group, and a user's computer is not a member of that group. Security groups deny inbound traffic by default, so the packet is dropped and the client times out (Evidence 3).
