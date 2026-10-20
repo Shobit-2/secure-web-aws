@@ -235,3 +235,38 @@ output "alb_dns_name" {
 output "target_group_arn" {
   value = aws_lb_target_group.app.arn
 }
+
+
+# ------------------------------------------------------------ ECS service
+resource "aws_ecs_service" "app" {
+  name             = "${var.name}-service"
+  cluster          = aws_ecs_cluster.main.id
+  task_definition  = aws_ecs_task_definition.app.arn
+  desired_count    = 2
+  launch_type      = "FARGATE"
+  platform_version = "LATEST"
+
+  # Terraform waits until the tasks are running and the targets are healthy
+  wait_for_steady_state = true
+
+  network_configuration {
+    subnets          = aws_subnet.public[*].id
+    security_groups  = [aws_security_group.task.id]
+    assign_public_ip = true
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.app.arn
+    container_name   = "nginx"
+    container_port   = 80
+  }
+
+  depends_on = [
+    aws_lb_listener.http,
+    aws_iam_role_policy_attachment.execution
+  ]
+}
+
+output "service_name" {
+  value = aws_ecs_service.app.name
+}
