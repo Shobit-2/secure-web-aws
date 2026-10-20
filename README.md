@@ -9,7 +9,7 @@ Tooling: Terraform >= 1.5, AWS provider ~> 5.0, AWS CLI v2
 Site URL while deployed: `http://secure-web-alb-1492229862.ap-south-1.elb.amazonaws.com/` (the stack has been destroyed, see Teardown result)
 
 1. Architecture
-
+```
                          Internet
                             |  TCP 80
                             v
@@ -33,7 +33,7 @@ Site URL while deployed: `http://secure-web-alb-1492229862.ap-south-1.elb.amazon
               |  outbound via Internet Gateway (image pull)
               v
    public.ecr.aws/docker/library/nginx:stable-alpine
-   
+
 
 Component                     	Detail
 
